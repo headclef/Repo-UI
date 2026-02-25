@@ -1,0 +1,9 @@
+{
+    "name": "UI",
+    "version_number": "1.0.0",
+    "website_url": "https://github.com/headclef/Repo-UI",
+    "description": "Unified Tab overlay showing level number, map value, haul progress, and player list for R.E.P.O.",
+    "dependencies": [
+        "BepInEx-BepInExPack-5.4.2100"
+    ]
+}
