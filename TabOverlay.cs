@@ -162,6 +162,12 @@ public static class TabOverlay
 
         sb.AppendLine();
 
+        // ── Weapon / Combat Info ──
+        sb.AppendLine("<color=#ff9600><b>Combat</b></color>");
+        AppendCombatInfo(sb);
+
+        sb.AppendLine();
+
         // ── Player List ──
         sb.AppendLine("<color=#ff9600><b>Players</b></color>");
 
@@ -200,6 +206,87 @@ public static class TabOverlay
             var preferredWidth = Math.Max(_overlayText.preferredWidth + 28f, 240f);
             var rectBg = _overlayRoot.GetComponent<RectTransform>();
             rectBg.sizeDelta = new Vector2(Math.Min(preferredWidth, 320f), Math.Max(preferredHeight, 120f));
+        }
+    }
+
+    private static void AppendCombatInfo(System.Text.StringBuilder sb)
+    {
+        // Try to find a gun the player is currently holding
+        var gun = GetHeldGun();
+
+        if (gun != null)
+        {
+            // ── Holding a gun ──
+            int batteryCurrent = Traverse.Create(gun).Field("batteryCurrent").GetValue<int>();
+            int batteryMax = Traverse.Create(gun).Field("batteryMax").GetValue<int>();
+            int damage = Traverse.Create(gun).Field("gunDamage").GetValue<int>();
+
+            string ammoColor = batteryCurrent > 0 ? "#55ff55" : "#ff5555";
+            sb.AppendLine($"  <color=#aaaaaa>Weapon:</color> <color=#cccccc>{gun.gameObject.name}</color>");
+            sb.AppendLine($"  <color=#aaaaaa>Ammo:</color> <color={ammoColor}>{batteryCurrent} / {batteryMax}</color>");
+            sb.AppendLine($"  <color=#aaaaaa>Damage:</color> <color=#ffaa55>{damage}</color>");
+        }
+        else
+        {
+            // ── Not holding a gun — show tumble launch damage ──
+            int tumbleDamage = GetTumbleLaunchDamage();
+            if (tumbleDamage > 0)
+            {
+                sb.AppendLine($"  <color=#aaaaaa>Tumble Launch:</color> <color=#ffaa55>{tumbleDamage} dmg</color>");
+            }
+            else
+            {
+                sb.AppendLine($"  <color=#666666>No weapon held</color>");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Try to find an ItemGun component on the object the player is currently grabbing.
+    /// </summary>
+    private static ItemGun? GetHeldGun()
+    {
+        try
+        {
+            if (PlayerController.instance == null) return null;
+
+            var physGrabber = PlayerController.instance.GetComponentInChildren<PhysGrabber>();
+            if (physGrabber == null) return null;
+
+            var grabbed = Traverse.Create(physGrabber).Field("grabbedPhysGrabObject").GetValue<PhysGrabObject>();
+            if (grabbed == null) return null;
+
+            return grabbed.GetComponent<ItemGun>();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Get the current tumble launch enemy damage.
+    /// This reads the live HurtCollider.enemyDamage value, which will include
+    /// any modifications from the Increase Tumble Damage mod if installed.
+    /// </summary>
+    private static int GetTumbleLaunchDamage()
+    {
+        try
+        {
+            if (PlayerAvatar.instance == null) return 0;
+
+            var tumble = PlayerAvatar.instance.GetComponentInChildren<PlayerTumble>();
+            if (tumble == null) return 0;
+
+            // The HurtCollider on the tumble object has the enemyDamage field
+            var hurtCollider = tumble.GetComponentInChildren<HurtCollider>();
+            if (hurtCollider == null) return 0;
+
+            return hurtCollider.enemyDamage;
+        }
+        catch
+        {
+            return 0;
         }
     }
 }
