@@ -6,6 +6,8 @@ using UnityEngine;
 namespace HeadclefUI;
 
 [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
+[BepInDependency("headclef.Improve")]
+[BepInDependency("headclef.IncreaseTumbleDamage", BepInDependency.DependencyFlags.SoftDependency)]
 public class HeadclefUI : BaseUnityPlugin
 {
     private const string PluginGuid = "headclef.UI";

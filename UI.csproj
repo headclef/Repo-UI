@@ -18,7 +18,6 @@
     </RestoreAdditionalProjectSources>
   </PropertyGroup>
 
-  <!-- Exclude reference code from compilation -->
   <ItemGroup>
     <Compile Remove="Reference\**" />
   </ItemGroup>
@@ -32,6 +31,18 @@
     <PackageReference Include="BepInEx.Core" Version="5.*" ExcludeAssets="runtime" />
     <PackageReference Include="UnityEngine.Modules" Version="2022.3.62" IncludeAssets="compile" PrivateAssets="all"/>
     <PackageReference Include="R.E.P.O.GameLibs.Steam" Version="*-*" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Reference to Improve and IncreaseTumbleDamage mods (compile-only, not bundled) -->
+  <ItemGroup>
+    <Reference Include="Improve">
+      <HintPath>..\Improve\bin\Debug\netstandard2.1\Improve.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="IncreaseTumbleDamage">
+      <HintPath>..\Increase Tumble Launch By Level\bin\Debug\netstandard2.1\Increase Tumble Damage.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
 </Project>

@@ -132,13 +132,19 @@ public static class TabOverlay
         var sb = new System.Text.StringBuilder();
 
         // ── Level ──
-        int level = 0;
+        int mapLevel = 0;
         if (StatsManager.instance?.runStats != null &&
             StatsManager.instance.runStats.ContainsKey("level"))
         {
-            level = StatsManager.instance.runStats["level"] + 1;
+            mapLevel = StatsManager.instance.runStats["level"] + 1;
         }
-        sb.AppendLine($"<color=#ff9600><size=22><b>Level {level}</b></size></color>");
+        
+        int impLevel = Improve.SaveData.CurrentLevel();
+        int impPoints = Improve.SaveData.AvailablePoints();
+        
+        sb.AppendLine($"<color=#ff9600><size=22><b>Map Level {mapLevel}</b></size></color>");
+        sb.AppendLine($"<color=#00ff99><size=22><b>Improve Level {impLevel}</b></size></color>");
+        sb.AppendLine($"<color=#cccccc>Available Points:</color> <color=#ffffff>{impPoints}</color>");
         sb.AppendLine();
 
         // ── Map Value ──
@@ -266,8 +272,8 @@ public static class TabOverlay
 
     /// <summary>
     /// Get the current tumble launch enemy damage.
-    /// This reads the live HurtCollider.enemyDamage value, which will include
-    /// any modifications from the Increase Tumble Damage mod if installed.
+    /// This reads the live HurtCollider.enemyDamage value, which is the base,
+    /// and dynamically calculates the Increase Tumble Damage mod scaling.
     /// </summary>
     private static int GetTumbleLaunchDamage()
     {
@@ -278,11 +284,41 @@ public static class TabOverlay
             var tumble = PlayerAvatar.instance.GetComponentInChildren<PlayerTumble>();
             if (tumble == null) return 0;
 
-            // The HurtCollider on the tumble object has the enemyDamage field
+            // The HurtCollider on the tumble object has the base enemyDamage field (usually 12)
             var hurtCollider = tumble.GetComponentInChildren<HurtCollider>();
             if (hurtCollider == null) return 0;
 
-            return hurtCollider.enemyDamage;
+            int baseDmg = hurtCollider.enemyDamage;
+            
+            // Apply Tumble scaling from Improve Mod
+            try
+            {
+                int upgrades = Improve.SaveData.AllocTumbleLaunch.Value;
+                if (upgrades > 0)
+                {
+                    Type tumbleType = typeof(Increase_Tumble_Damage.Increase_Tumble_Damage);
+                    bool enabled = Traverse.Create(tumbleType).Field("EnableDamageOnEnemy").GetValue<BepInEx.Configuration.ConfigEntry<bool>>()?.Value ?? false;
+                    
+                    if (enabled)
+                    {
+                        float multPerLvl = Traverse.Create(tumbleType).Field("MultiplierPerLevel").GetValue<BepInEx.Configuration.ConfigEntry<float>>()?.Value ?? 0f;
+                        float maxMult = Traverse.Create(tumbleType).Field("MaxMultiplier").GetValue<BepInEx.Configuration.ConfigEntry<float>>()?.Value ?? 0f;
+                        
+                        float multiplier = multPerLvl * upgrades;
+                        if (maxMult > 0f)
+                            multiplier = Math.Min(multiplier, maxMult);
+                            
+                        if (multiplier > 0f)
+                            return Mathf.RoundToInt(baseDmg * multiplier);
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback if the mod isn't loaded correctly
+            }
+
+            return baseDmg;
         }
         catch
         {
