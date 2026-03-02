@@ -133,7 +133,8 @@ public static class TabOverlay
 
         var sb = new System.Text.StringBuilder();
         
-        // ── Empty line to push one line below ──
+        // ── Empty lines to push one line below ──
+        sb.AppendLine();
         sb.AppendLine();
 
         // ── Level ──
@@ -144,12 +145,16 @@ public static class TabOverlay
             mapLevel = StatsManager.instance.runStats["level"] + 1;
         }
         
-        int impLevel = Improve.SaveData.CurrentLevel();
-        int impPoints = Improve.SaveData.AvailablePoints();
-        
         sb.AppendLine($"<color=#ff9600><size=22><b>Map Level {mapLevel}</b></size></color>");
-        sb.AppendLine($"<color=#00ff99><size=22><b>Improve Level {impLevel}</b></size></color>");
-        sb.AppendLine($"<color=#cccccc>Available Points:</color> <color=#ffffff>{impPoints}</color>");
+
+        try
+        {
+            int impLevel = Improve.SaveData.CurrentLevel();
+            int impPoints = Improve.SaveData.AvailablePoints();
+            sb.AppendLine($"<color=#00ff99><size=22><b>Improve Level {impLevel}</b></size></color>");
+            sb.AppendLine($"<color=#cccccc>Available Points:</color> <color=#ffffff>{impPoints}</color>");
+        }
+        catch { /* Improve mod not loaded */ }
 
         // ── Map Value ──
         MapValueTracker.UpdateIfNeeded();
@@ -217,7 +222,7 @@ public static class TabOverlay
             // ── Holding a gun ──
             int currentBars = gun.itemBattery != null ? gun.itemBattery.currentBars : 0;
             int totalBars   = gun.itemBattery != null ? gun.itemBattery.batteryBars : 0;
-            int damage       = gun.hurtCollider != null ? gun.hurtCollider.enemyDamage : 0;
+            int damage      = GetGunDamage(gun);
 
             string ammoColor = currentBars > 0 ? "#55ff55" : "#ff5555";
             sb.AppendLine($"  <color=#aaaaaa>Weapon:</color> <color=#cccccc>{gun.gameObject.name}</color>");
@@ -277,6 +282,39 @@ public static class TabOverlay
     }
 
     /// <summary>
+    /// Read the actual damage for a gun.  The real value lives on the
+    /// bullet prefab (ItemGunBullet.hurtCollider.enemyDamage) or, for
+    /// laser guns, on SemiLaser.hurtCollider.enemyDamage.
+    /// gun.hurtCollider.enemyDamage is only for physical-throw impact (usually 0).
+    /// </summary>
+    private static int GetGunDamage(ItemGun gun)
+    {
+        try
+        {
+            // Bullet-based guns
+            if (gun.bulletPrefab != null)
+            {
+                var bullet = gun.bulletPrefab.GetComponent<ItemGunBullet>();
+                if (bullet != null && bullet.hasHurtCollider && bullet.hurtCollider != null)
+                    return bullet.hurtCollider.enemyDamage;
+            }
+
+            // Laser-based guns
+            var laser = gun.GetComponent<ItemGunLaser>()
+                     ?? gun.GetComponentInChildren<ItemGunLaser>();
+            if (laser != null && laser.semiLaser != null && laser.semiLaser.hurtCollider != null)
+                return laser.semiLaser.hurtCollider.enemyDamage;
+
+            // Last resort: gun body's own HurtCollider
+            if (gun.hurtCollider != null)
+                return gun.hurtCollider.enemyDamage;
+        }
+        catch { }
+
+        return 0;
+    }
+
+    /// <summary>
     /// Get the current tumble launch enemy damage.
     /// This reads the live HurtCollider.enemyDamage value, which is the base,
     /// and dynamically calculates the Increase Tumble Damage mod scaling.
@@ -299,14 +337,22 @@ public static class TabOverlay
             int baseDmg = hurtCollider.enemyDamage;
             if (baseDmg <= 0) baseDmg = 12; // fallback to known default
 
-            // Read upgrade level from StatsManager directly (same data the
-            // TumbleLaunchDamagePatch reads via Character_Stats)
+            // Read upgrade level using Character_Stats API (same source as TumbleLaunchDamagePatch)
+            // This includes upgrades from all mods (Improve, etc.)
             string steamId = SemiFunc.PlayerGetSteamID(PlayerAvatar.instance);
             int tumbleUpgrades = 0;
-            if (StatsManager.instance != null &&
-                StatsManager.instance.playerUpgradeLaunch.TryGetValue(steamId, out int lvl))
+            try
             {
-                tumbleUpgrades = lvl;
+                tumbleUpgrades = Character_Stats.Character_Stats.GetUpgradeLevel(steamId, "Launch");
+            }
+            catch
+            {
+                // Character Stats mod not loaded — fallback to vanilla
+                if (StatsManager.instance != null &&
+                    StatsManager.instance.playerUpgradeLaunch.TryGetValue(steamId, out int lvl))
+                {
+                    tumbleUpgrades = lvl;
+                }
             }
 
             // Apply the same scaling formula the TumbleLaunchDamagePatch uses

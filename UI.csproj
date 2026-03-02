@@ -39,6 +39,10 @@
       <HintPath>..\Improve\bin\Debug\netstandard2.1\Improve.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Character Stats">
+      <HintPath>..\Character Stats\bin\Debug\netstandard2.1\Character Stats.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="IncreaseTumbleDamage">
       <HintPath>..\Increase Tumble Launch By Level\bin\Debug\netstandard2.1\Increase Tumble Damage.dll</HintPath>
       <Private>false</Private>
