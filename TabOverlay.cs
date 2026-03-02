@@ -132,6 +132,9 @@ public static class TabOverlay
         if (_overlayText == null) return;
 
         var sb = new System.Text.StringBuilder();
+        
+        // ── Empty line to push one line below ──
+        sb.AppendLine();
 
         // ── Level ──
         int mapLevel = 0;
@@ -144,7 +147,6 @@ public static class TabOverlay
         int impLevel = Improve.SaveData.CurrentLevel();
         int impPoints = Improve.SaveData.AvailablePoints();
         
-        sb.AppendLine();
         sb.AppendLine($"<color=#ff9600><size=22><b>Map Level {mapLevel}</b></size></color>");
         sb.AppendLine($"<color=#00ff99><size=22><b>Improve Level {impLevel}</b></size></color>");
         sb.AppendLine($"<color=#cccccc>Available Points:</color> <color=#ffffff>{impPoints}</color>");
@@ -213,9 +215,9 @@ public static class TabOverlay
         if (gun != null)
         {
             // ── Holding a gun ──
-            int currentBars = gun.itemBattery.currentBars;
-            int totalBars = gun.itemBattery.batteryBars;
-            int damage = gun.hurtCollider.enemyDamage;
+            int currentBars = gun.itemBattery != null ? gun.itemBattery.currentBars : 0;
+            int totalBars   = gun.itemBattery != null ? gun.itemBattery.batteryBars : 0;
+            int damage       = gun.hurtCollider != null ? gun.hurtCollider.enemyDamage : 0;
 
             string ammoColor = currentBars > 0 ? "#55ff55" : "#ff5555";
             sb.AppendLine($"  <color=#aaaaaa>Weapon:</color> <color=#cccccc>{gun.gameObject.name}</color>");
@@ -238,19 +240,40 @@ public static class TabOverlay
     }
 
     /// <summary>
-    /// Try to find an ItemGun component on the object the player is currently grabbing.
+    /// Try to find an ItemGun the local player is currently holding.
+    /// Checks both physics-grab (pre-equip) and inventory (equipped) states.
     /// </summary>
     private static ItemGun? GetHeldGun()
     {
         try
         {
-            if (PhysGrabber.instance == null) return null;
-            if (!PhysGrabber.instance.grabbed) return null;
+            // 1. Check if we're physics-grabbing a gun (before it's equipped)
+            if (PhysGrabber.instance != null && PhysGrabber.instance.grabbed)
+            {
+                var grabbedObj = PhysGrabber.instance.grabbedPhysGrabObject;
+                if (grabbedObj != null)
+                {
+                    var gun = grabbedObj.GetComponent<ItemGun>();
+                    if (gun != null) return gun;
+                }
+            }
 
-            var grabbedObj = PhysGrabber.instance.grabbedPhysGrabObject;
-            if (grabbedObj == null) return null;
+            // 2. Check inventory slots for an equipped gun
+            if (Inventory.instance != null)
+            {
+                foreach (var spot in Inventory.instance.inventorySpots)
+                {
+                    if (spot == null) continue;
 
-            return grabbedObj.GetComponent<ItemGun>();
+                    var equippable = spot.CurrentItem;
+                    if (equippable == null) continue;
+
+                    var gun = equippable.GetComponent<ItemGun>();
+                    if (gun != null) return gun;
+                }
+            }
+
+            return null;
         }
         catch
         {
