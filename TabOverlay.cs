@@ -240,37 +240,32 @@ public static class TabOverlay
     }
 
     /// <summary>
-    /// Try to find an ItemGun the local player is currently holding.
-    /// Checks both physics-grab (pre-equip) and inventory (equipped) states.
+    /// Try to find an ItemGun the local player is currently holding in hand.
+    /// In REPO, "Equipped" means stored in inventory — when a gun is taken OUT
+    /// and held in hand, it's in ItemState.Idle with PhysGrabObject.grabbedLocal == true.
     /// </summary>
     private static ItemGun? GetHeldGun()
     {
         try
         {
-            // 1. Check if we're physics-grabbing a gun (before it's equipped)
-            if (PhysGrabber.instance != null && PhysGrabber.instance.grabbed)
+            // Fast path: check what the local PhysGrabber is holding
+            var grabber = PhysGrabber.instance;
+            if (grabber != null && grabber.grabbed && grabber.grabbedPhysGrabObject != null)
             {
-                var grabbedObj = PhysGrabber.instance.grabbedPhysGrabObject;
-                if (grabbedObj != null)
-                {
-                    var gun = grabbedObj.GetComponent<ItemGun>();
-                    if (gun != null) return gun;
-                }
+                var obj = grabber.grabbedPhysGrabObject;
+                // ItemGun may be on the same object or a child
+                var gun = obj.GetComponent<ItemGun>()
+                       ?? obj.GetComponentInChildren<ItemGun>();
+                if (gun != null) return gun;
             }
 
-            // 2. Check inventory slots for an equipped gun
-            if (Inventory.instance != null)
+            // Fallback: scan all guns in scene and check grabbedLocal
+            foreach (var gun in UnityEngine.Object.FindObjectsOfType<ItemGun>())
             {
-                foreach (var spot in Inventory.instance.inventorySpots)
-                {
-                    if (spot == null) continue;
-
-                    var equippable = spot.CurrentItem;
-                    if (equippable == null) continue;
-
-                    var gun = equippable.GetComponent<ItemGun>();
-                    if (gun != null) return gun;
-                }
+                var physObj = gun.GetComponent<PhysGrabObject>()
+                           ?? gun.GetComponentInParent<PhysGrabObject>();
+                if (physObj != null && physObj.grabbedLocal)
+                    return gun;
             }
 
             return null;
