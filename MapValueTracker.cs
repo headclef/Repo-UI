@@ -7,31 +7,57 @@ namespace HeadclefUI;
 
 /// <summary>
 /// Tracks the total remaining dollar value of valuable items on the current map.
-/// Hooks into item spawning, value changes, breakage, destruction, and extraction.
+/// Uses a periodic live scan of all ValuableObject instances for reliability
+/// (the game's coroutine-based value initialisation makes patch-only tracking fragile).
+/// Breakage / destruction events are applied immediately so the value updates in real-time.
 /// </summary>
 public static class MapValueTracker
 {
     public static float TotalValue { get; private set; }
     public static float InitialValue { get; private set; }
 
+    private static float _lastRecalcTime;
+    private const float RecalcInterval = 2f; // seconds between full scans
+
     public static void Reset()
     {
         TotalValue = 0f;
         InitialValue = 0f;
+        _lastRecalcTime = 0f;
     }
 
-    public static void Recalculate(ValuableObject? ignore = null)
+    /// <summary>
+    /// Full scan of every ValuableObject currently in the scene.
+    /// Called periodically from the overlay update loop and after key events.
+    /// </summary>
+    public static void Recalculate()
     {
+        if (RoundDirector.instance == null) return;
+
         if (Traverse.Create(RoundDirector.instance)
             .Field("allExtractionPointsCompleted").GetValue<bool>())
             return;
 
         TotalValue = 0f;
-        var items = Object.FindObjectsOfType<ValuableObject>().ToList();
-        if (ignore != null) items.Remove(ignore);
+        var items = Object.FindObjectsOfType<ValuableObject>();
 
         foreach (var item in items)
-            TotalValue += item.dollarValueCurrent;
+        {
+            if (item.dollarValueSet)
+                TotalValue += item.dollarValueCurrent;
+        }
+
+        _lastRecalcTime = Time.time;
+    }
+
+    /// <summary>
+    /// Called every frame from the overlay.  Only does a full scan every
+    /// <see cref="RecalcInterval"/> seconds to limit perf cost.
+    /// </summary>
+    public static void UpdateIfNeeded()
+    {
+        if (Time.time - _lastRecalcTime >= RecalcInterval)
+            Recalculate();
     }
 
     // ── Patches ──
@@ -41,18 +67,11 @@ public static class MapValueTracker
     private static void OnGenerationStart() => Reset();
 
     [HarmonyPatch(typeof(LevelGenerator), "GenerateDone")]
-    [HarmonyPrefix]
+    [HarmonyPostfix]
     private static void OnGenerationDone()
     {
         Recalculate();
         InitialValue = TotalValue;
-    }
-
-    [HarmonyPatch(typeof(ValuableObject), "DollarValueSetRPC")]
-    [HarmonyPostfix]
-    private static void OnValueSet(float value)
-    {
-        TotalValue += value;
     }
 
     [HarmonyPatch(typeof(PhysGrabObjectImpactDetector), "BreakRPC")]
@@ -72,7 +91,6 @@ public static class MapValueTracker
         var valuable = __instance.GetComponent<ValuableObject>();
         if (valuable == null) return;
 
-        // Only subtract if item still has meaningful value (>15% of original)
         if (valuable.dollarValueCurrent >= valuable.dollarValueOriginal * 0.15f)
             TotalValue -= valuable.dollarValueCurrent;
     }

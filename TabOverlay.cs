@@ -17,7 +17,6 @@ public static class TabOverlay
 {
     private static GameObject? _overlayRoot;
     private static TextMeshProUGUI? _overlayText;
-    private static bool _initialized;
 
     [HarmonyPatch(typeof(RoundDirector), "Update")]
     [HarmonyPostfix]
@@ -27,25 +26,24 @@ public static class TabOverlay
 
         try
         {
-            if (!_initialized)
+            // Recreate every time it's null — the game destroys unknown
+            // HUD children during level transitions.
+            if (_overlayRoot == null)
             {
+                _overlayRoot = null;  // clear stale C# ref
+                _overlayText = null;
                 CreateOverlay();
-                _initialized = true;
+                if (_overlayRoot == null) return;   // creation failed
             }
 
-            if (_overlayRoot == null || _overlayText == null) return;
-
-            // Show only while Tab is held (InputKey 8 = Tab/Map key)
-            bool tabHeld = SemiFunc.InputHold((InputKey)8);
+            // Input: Tab hold OR map toggled (sticky)
             bool mapToggled = false;
-
             if (MapToolController.instance != null)
-            {
                 mapToggled = Traverse.Create(MapToolController.instance)
-                    .Field("mapToggled").GetValue<bool>();
-            }
+                                     .Field("mapToggled").GetValue<bool>();
 
-            bool shouldShow = tabHeld || mapToggled;
+            bool shouldShow = SemiFunc.InputHold((InputKey)8) || mapToggled;
+
             _overlayRoot.SetActive(shouldShow);
 
             if (shouldShow)
@@ -70,59 +68,63 @@ public static class TabOverlay
             _overlayRoot = null;
             _overlayText = null;
         }
-        _initialized = false;
     }
 
     private static void CreateOverlay()
     {
         var gameHud = GameObject.Find("Game Hud");
-        if (gameHud == null) return;
-
-        // Find a TMP font from existing UI
-        var taxHaul = GameObject.Find("Tax Haul");
-        TMP_FontAsset? font = null;
-        if (taxHaul != null)
+        if (gameHud == null)
         {
-            var tmp = taxHaul.GetComponent<TMP_Text>();
-            if (tmp != null) font = tmp.font;
+            HeadclefUI.Logger.LogWarning("Tab overlay: 'Game Hud' not found.");
+            return;
         }
 
-        // Create container
-        _overlayRoot = new GameObject("Headclef Tab Overlay");
-        _overlayRoot.SetActive(false);
+        var taxHaul = GameObject.Find("Tax Haul");
+        if (taxHaul == null)
+        {
+            HeadclefUI.Logger.LogWarning("Tab overlay: 'Tax Haul' not found.");
+            return;
+        }
+
+        // Get font exactly how the working MapValueTracker mod does it
+        TMP_FontAsset font = taxHaul.GetComponent<TMP_Text>().font;
+
+        HeadclefUI.Logger.LogInfo($"CreateOverlay: gameHud='{gameHud.name}', font='{font?.name}'");
+
+        // ── Create exactly like the working MapValueTracker reference mod ──
+        // Single GameObject, TextMeshProUGUI directly on it, NO Image component
+        _overlayRoot = new GameObject();
+        _overlayRoot.SetActive(false);                         // start hidden
+        _overlayRoot.name = "Headclef Tab Overlay";
+
+        // Add TMP text directly on the root (same pattern as reference mod)
+        _overlayRoot.AddComponent<TextMeshProUGUI>();
+        _overlayText = _overlayRoot.GetComponent<TextMeshProUGUI>();
+        _overlayText.font = font;
+        _overlayText.color = new Color(0.79f, 0.91f, 0.90f, 1f);
+        _overlayText.fontSize = 18f;
+        _overlayText.enableWordWrapping = true;
+        _overlayText.alignment = TextAlignmentOptions.TopRight;
+        _overlayText.horizontalAlignment = HorizontalAlignmentOptions.Right;
+        _overlayText.verticalAlignment = VerticalAlignmentOptions.Top;
+
+        // Parent to Game Hud (same as reference mod)
         _overlayRoot.transform.SetParent(gameHud.transform, false);
 
-        // Add background panel for readability
-        var bg = _overlayRoot.AddComponent<Image>();
-        bg.color = new Color(0f, 0f, 0f, 0.6f);
+        // Set anchoring exactly like the working reference mod:
+        // anchor to full width at bottom, then use offsets to position
+        var rect = _overlayRoot.GetComponent<RectTransform>();
+        rect.pivot = new Vector2(1f, 1f);
+        rect.anchoredPosition = new Vector2(1f, -1f);
+        rect.anchorMin = new Vector2(0f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.sizeDelta = new Vector2(0f, 0f);
+        // Position in upper-right area of the HUD (offset from bottom)
+        rect.offsetMax = new Vector2(0f, 350f);
+        rect.offsetMin = new Vector2(400f, 150f);
 
-        // Position: center-right
-        var rectBg = _overlayRoot.GetComponent<RectTransform>();
-        rectBg.anchorMin = new Vector2(1f, 0.5f);
-        rectBg.anchorMax = new Vector2(1f, 0.5f);
-        rectBg.pivot = new Vector2(1f, 0.5f);
-        rectBg.anchoredPosition = new Vector2(-20f, 0f);
-        rectBg.sizeDelta = new Vector2(280f, 300f);
-
-        // Add text element
-        var textObj = new GameObject("Overlay Text");
-        textObj.transform.SetParent(_overlayRoot.transform, false);
-
-        _overlayText = textObj.AddComponent<TextMeshProUGUI>();
-        if (font != null) _overlayText.font = font;
-        _overlayText.fontSize = 18f;
-        _overlayText.color = new Color(0.79f, 0.91f, 0.90f, 1f);
-        _overlayText.enableWordWrapping = true;
-        _overlayText.alignment = TextAlignmentOptions.TopLeft;
-        _overlayText.overflowMode = TextOverflowModes.Overflow;
-
-        var rectText = textObj.GetComponent<RectTransform>();
-        rectText.anchorMin = Vector2.zero;
-        rectText.anchorMax = Vector2.one;
-        rectText.offsetMin = new Vector2(12f, 10f);
-        rectText.offsetMax = new Vector2(-12f, -10f);
-
-        HeadclefUI.Logger.LogDebug("Tab overlay created.");
+        HeadclefUI.Logger.LogInfo($"Overlay created. activeInHierarchy={_overlayRoot.activeInHierarchy}, parent='{_overlayRoot.transform.parent?.name}'");
+        HeadclefUI.Logger.LogInfo($"isDestroyed check: rootNull={_overlayRoot == null}, refNull={ReferenceEquals(_overlayRoot, null)}");
     }
 
     private static void UpdateContent()
@@ -142,12 +144,13 @@ public static class TabOverlay
         int impLevel = Improve.SaveData.CurrentLevel();
         int impPoints = Improve.SaveData.AvailablePoints();
         
+        sb.AppendLine();
         sb.AppendLine($"<color=#ff9600><size=22><b>Map Level {mapLevel}</b></size></color>");
         sb.AppendLine($"<color=#00ff99><size=22><b>Improve Level {impLevel}</b></size></color>");
         sb.AppendLine($"<color=#cccccc>Available Points:</color> <color=#ffffff>{impPoints}</color>");
-        sb.AppendLine();
 
         // ── Map Value ──
+        MapValueTracker.UpdateIfNeeded();
         float mapValue = MapValueTracker.TotalValue;
         sb.AppendLine($"<color=#aaaaaa>Map Value:</color> <color=#55ff55>${mapValue:N0}</color>");
 
@@ -156,7 +159,7 @@ public static class TabOverlay
         {
             int haulGoal = Traverse.Create(RoundDirector.instance)
                 .Field("extractionHaulGoal").GetValue<int>();
-            int currentHaul = StatsManager.instance?.GetRunStatTotalHaul() ?? 0;
+            int currentHaul = RoundDirector.instance.currentHaul;
 
             if (haulGoal > 0)
             {
@@ -166,13 +169,9 @@ public static class TabOverlay
             }
         }
 
-        sb.AppendLine();
-
         // ── Weapon / Combat Info ──
         sb.AppendLine("<color=#ff9600><b>Combat</b></color>");
         AppendCombatInfo(sb);
-
-        sb.AppendLine();
 
         // ── Player List ──
         sb.AppendLine("<color=#ff9600><b>Players</b></color>");
@@ -204,15 +203,6 @@ public static class TabOverlay
         }
 
         _overlayText.text = sb.ToString();
-
-        // Resize background to fit content
-        if (_overlayRoot != null)
-        {
-            var preferredHeight = _overlayText.preferredHeight + 24f;
-            var preferredWidth = Math.Max(_overlayText.preferredWidth + 28f, 240f);
-            var rectBg = _overlayRoot.GetComponent<RectTransform>();
-            rectBg.sizeDelta = new Vector2(Math.Min(preferredWidth, 320f), Math.Max(preferredHeight, 120f));
-        }
     }
 
     private static void AppendCombatInfo(System.Text.StringBuilder sb)
@@ -223,13 +213,13 @@ public static class TabOverlay
         if (gun != null)
         {
             // ── Holding a gun ──
-            int batteryCurrent = Traverse.Create(gun).Field("batteryCurrent").GetValue<int>();
-            int batteryMax = Traverse.Create(gun).Field("batteryMax").GetValue<int>();
-            int damage = Traverse.Create(gun).Field("gunDamage").GetValue<int>();
+            int currentBars = gun.itemBattery.currentBars;
+            int totalBars = gun.itemBattery.batteryBars;
+            int damage = gun.hurtCollider.enemyDamage;
 
-            string ammoColor = batteryCurrent > 0 ? "#55ff55" : "#ff5555";
+            string ammoColor = currentBars > 0 ? "#55ff55" : "#ff5555";
             sb.AppendLine($"  <color=#aaaaaa>Weapon:</color> <color=#cccccc>{gun.gameObject.name}</color>");
-            sb.AppendLine($"  <color=#aaaaaa>Ammo:</color> <color={ammoColor}>{batteryCurrent} / {batteryMax}</color>");
+            sb.AppendLine($"  <color=#aaaaaa>Ammo:</color> <color={ammoColor}>{currentBars} / {totalBars}</color>");
             sb.AppendLine($"  <color=#aaaaaa>Damage:</color> <color=#ffaa55>{damage}</color>");
         }
         else
@@ -254,15 +244,13 @@ public static class TabOverlay
     {
         try
         {
-            if (PlayerController.instance == null) return null;
+            if (PhysGrabber.instance == null) return null;
+            if (!PhysGrabber.instance.grabbed) return null;
 
-            var physGrabber = PlayerController.instance.GetComponentInChildren<PhysGrabber>();
-            if (physGrabber == null) return null;
+            var grabbedObj = PhysGrabber.instance.grabbedPhysGrabObject;
+            if (grabbedObj == null) return null;
 
-            var grabbed = Traverse.Create(physGrabber).Field("grabbedPhysGrabObject").GetValue<PhysGrabObject>();
-            if (grabbed == null) return null;
-
-            return grabbed.GetComponent<ItemGun>();
+            return grabbedObj.GetComponent<ItemGun>();
         }
         catch
         {
@@ -281,41 +269,40 @@ public static class TabOverlay
         {
             if (PlayerAvatar.instance == null) return 0;
 
-            var tumble = PlayerAvatar.instance.GetComponentInChildren<PlayerTumble>();
+            // Access tumble directly via the public field (not GetComponentInChildren
+            // which misses inactive children)
+            var tumble = PlayerAvatar.instance.tumble;
             if (tumble == null) return 0;
 
-            // The HurtCollider on the tumble object has the base enemyDamage field (usually 12)
-            var hurtCollider = tumble.GetComponentInChildren<HurtCollider>();
+            // The HurtCollider is a public field on PlayerTumble
+            var hurtCollider = tumble.hurtCollider;
             if (hurtCollider == null) return 0;
 
             int baseDmg = hurtCollider.enemyDamage;
-            
-            // Apply Tumble scaling from Improve Mod
-            try
+            if (baseDmg <= 0) baseDmg = 12; // fallback to known default
+
+            // Read upgrade level from StatsManager directly (same data the
+            // TumbleLaunchDamagePatch reads via Character_Stats)
+            string steamId = SemiFunc.PlayerGetSteamID(PlayerAvatar.instance);
+            int tumbleUpgrades = 0;
+            if (StatsManager.instance != null &&
+                StatsManager.instance.playerUpgradeLaunch.TryGetValue(steamId, out int lvl))
             {
-                int upgrades = Improve.SaveData.AllocTumbleLaunch.Value;
-                if (upgrades > 0)
-                {
-                    Type tumbleType = typeof(Increase_Tumble_Damage.Increase_Tumble_Damage);
-                    bool enabled = Traverse.Create(tumbleType).Field("EnableDamageOnEnemy").GetValue<BepInEx.Configuration.ConfigEntry<bool>>()?.Value ?? false;
-                    
-                    if (enabled)
-                    {
-                        float multPerLvl = Traverse.Create(tumbleType).Field("MultiplierPerLevel").GetValue<BepInEx.Configuration.ConfigEntry<float>>()?.Value ?? 0f;
-                        float maxMult = Traverse.Create(tumbleType).Field("MaxMultiplier").GetValue<BepInEx.Configuration.ConfigEntry<float>>()?.Value ?? 0f;
-                        
-                        float multiplier = multPerLvl * upgrades;
-                        if (maxMult > 0f)
-                            multiplier = Math.Min(multiplier, maxMult);
-                            
-                        if (multiplier > 0f)
-                            return Mathf.RoundToInt(baseDmg * multiplier);
-                    }
-                }
+                tumbleUpgrades = lvl;
             }
-            catch
+
+            // Apply the same scaling formula the TumbleLaunchDamagePatch uses
+            if (tumbleUpgrades > 0 && Increase_Tumble_Damage.Increase_Tumble_Damage.EnableDamageOnEnemy.Value)
             {
-                // Fallback if the mod isn't loaded correctly
+                float multPerLvl = Increase_Tumble_Damage.Increase_Tumble_Damage.MultiplierPerLevel.Value;
+                float maxMult = Increase_Tumble_Damage.Increase_Tumble_Damage.MaxMultiplier.Value;
+
+                float multiplier = multPerLvl * tumbleUpgrades;
+                if (maxMult > 0f)
+                    multiplier = Math.Min(multiplier, maxMult);
+
+                if (multiplier > 0f)
+                    return Mathf.RoundToInt(baseDmg * multiplier);
             }
 
             return baseDmg;
