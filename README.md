@@ -6,6 +6,8 @@ A [BepInEx](https://github.com/BepInEx/BepInEx) mod for **R.E.P.O.** that adds a
 
 Hold **Tab** during gameplay to see a clean info panel on the right side of your screen:
 
+![UI Overlay Example](https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/Panel%20-%20IncreasedTumbleLaunch%20Effect.png)
+
 ### Level Info
 
 - **Map Level** — the current level you're on (Level 1, Level 2, etc.).
@@ -28,6 +30,9 @@ Shows your current haul versus the extraction goal with color-coded text:
 Displays real-time combat information:
 
 - **Held weapon** — name, ammo bars, and damage when holding a gun (supports bullet-based and laser guns).
+
+![Holding Gun Effect](https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/Panel%20-%20Holding%20Gun%20Effect.png)
+
 - **Tumble launch damage** — shows your tumble damage including scaling from [Increase Tumble Damage](https://github.com/headclef/Repo-Increase-Tumble-Damage) upgrades and [Improve](https://github.com/headclef/Repo-Improve) stat points *(requires [Character Stats](https://github.com/headclef/Repo-Character-Stats))*.
 
 ### Player List
