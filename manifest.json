@@ -6,7 +6,7 @@
     "dependencies": [
         "BepInEx-BepInExPack-5.4.2100",
         "nickklmao-MenuLib-2.5.1",
-        "headclef-Improve-1.0.2",
+        "headclef-Improve-1.0.3",
         "headclef-CharacterStats-1.0.0",
         "headclef-IncreaseTumbleDamage-1.1.0"
     ]
