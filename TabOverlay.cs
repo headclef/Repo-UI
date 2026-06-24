@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BepInEx.Bootstrap;
 using HarmonyLib;
 using TMPro;
 using UnityEngine;
@@ -8,15 +9,39 @@ using UnityEngine.UI;
 namespace HeadclefUI;
 
 /// <summary>
-/// Creates and manages the Tab overlay — a unified info panel shown
-/// while holding Tab, positioned at center-right of the screen.
-/// Shows: Level number, map value, haul progress, and player list with status.
+/// Creates and manages the Tab overlay, shown while holding Tab. Two right-side
+/// panels: a top-right INFO panel (map value, combat/tumble) sitting just below the
+/// game's HUD, and a bottom-right PLAYER panel that grows UPWARD as players join.
 /// </summary>
 [HarmonyPatch]
 public static class TabOverlay
 {
     private static GameObject? _overlayRoot;
-    private static TextMeshProUGUI? _overlayText;
+    private static TextMeshProUGUI? _infoText;   // top-right panel: map value, combat
+    private static TextMeshProUGUI? _playerText; // bottom-right panel: player list, grows up
+
+    // ── Soft-dependency presence flags (checked once) ──
+    // UI references Improve / Character Stats / Increase Tumble Damage as SOFT
+    // dependencies. Touching one of their types inside a method forces the runtime
+    // to resolve that assembly when the method is JIT-compiled — which throws (and a
+    // try/catch inside the SAME method does not help) when the mod isn't installed.
+    // So every block that touches those types lives in its own method that is only
+    // CALLED when the corresponding mod is present.
+    private static bool _depsChecked;
+    private static bool _improveLoaded;
+    private static bool _charStatsLoaded;
+    private static bool _tumbleDamageLoaded;
+
+    private static void EnsureDepsChecked()
+    {
+        if (_depsChecked) return;
+        _depsChecked = true;
+
+        var plugins = Chainloader.PluginInfos;
+        _improveLoaded = plugins.ContainsKey("headclef.Improve");
+        _charStatsLoaded = plugins.ContainsKey("headclef.CharacterStats");
+        _tumbleDamageLoaded = plugins.ContainsKey("headclef.IncreaseTumbleDamage");
+    }
 
     [HarmonyPatch(typeof(RoundDirector), "Update")]
     [HarmonyPostfix]
@@ -31,7 +56,8 @@ public static class TabOverlay
             if (_overlayRoot == null)
             {
                 _overlayRoot = null;  // clear stale C# ref
-                _overlayText = null;
+                _infoText = null;
+                _playerText = null;
                 CreateOverlay();
                 if (_overlayRoot == null) return;   // creation failed
             }
@@ -66,7 +92,8 @@ public static class TabOverlay
         {
             UnityEngine.Object.Destroy(_overlayRoot);
             _overlayRoot = null;
-            _overlayText = null;
+            _infoText = null;
+            _playerText = null;
         }
     }
 
@@ -87,101 +114,93 @@ public static class TabOverlay
         }
 
         // Get font exactly how the working MapValueTracker mod does it
-        TMP_FontAsset font = taxHaul.GetComponent<TMP_Text>().font;
+        TMP_FontAsset? font = taxHaul.GetComponent<TMP_Text>()?.font;
+        if (font is null)
+        {
+            HeadclefUI.Logger.LogWarning("Tab overlay: HUD font not found.");
+            return;
+        }
 
-        HeadclefUI.Logger.LogInfo($"CreateOverlay: gameHud='{gameHud.name}', font='{font?.name}'");
+        // HeadclefUI.Logger.LogInfo($"CreateOverlay: gameHud='{gameHud.name}', font='{font?.name}'");
 
-        // ── Create exactly like the working MapValueTracker reference mod ──
-        // Single GameObject, TextMeshProUGUI directly on it, NO Image component
-        _overlayRoot = new GameObject();
+        // Container that fills the HUD; the two panels anchor to its corners.
+        _overlayRoot = new GameObject("Headclef Tab Overlay", typeof(RectTransform));
         _overlayRoot.SetActive(false);                         // start hidden
-        _overlayRoot.name = "Headclef Tab Overlay";
-
-        // Add TMP text directly on the root (same pattern as reference mod)
-        _overlayRoot.AddComponent<TextMeshProUGUI>();
-        _overlayText = _overlayRoot.GetComponent<TextMeshProUGUI>();
-        _overlayText.font = font;
-        _overlayText.color = new Color(0.79f, 0.91f, 0.90f, 1f);
-        _overlayText.fontSize = 18f;
-        _overlayText.enableWordWrapping = true;
-        _overlayText.alignment = TextAlignmentOptions.TopRight;
-        _overlayText.horizontalAlignment = HorizontalAlignmentOptions.Right;
-        _overlayText.verticalAlignment = VerticalAlignmentOptions.Top;
-
-        // Parent to Game Hud (same as reference mod)
         _overlayRoot.transform.SetParent(gameHud.transform, false);
 
-        // Set anchoring exactly like the working reference mod:
-        // anchor to full width at bottom, then use offsets to position
-        var rect = _overlayRoot.GetComponent<RectTransform>();
-        rect.pivot = new Vector2(1f, 1f);
-        rect.anchoredPosition = new Vector2(1f, -1f);
-        rect.anchorMin = new Vector2(0f, 0f);
-        rect.anchorMax = new Vector2(1f, 0f);
-        rect.sizeDelta = new Vector2(0f, 0f);
-        // Position in upper-right area of the HUD (offset from bottom)
-        rect.offsetMax = new Vector2(0f, 350f);
-        rect.offsetMin = new Vector2(400f, 150f);
+        var rootRect = (RectTransform)_overlayRoot.transform;
+        rootRect.anchorMin = Vector2.zero;
+        rootRect.anchorMax = Vector2.one;
+        rootRect.offsetMin = Vector2.zero;
+        rootRect.offsetMax = Vector2.zero;
 
-        HeadclefUI.Logger.LogInfo($"Overlay created. activeInHierarchy={_overlayRoot.activeInHierarchy}, parent='{_overlayRoot.transform.parent?.name}'");
-        HeadclefUI.Logger.LogInfo($"isDestroyed check: rootNull={_overlayRoot == null}, refNull={ReferenceEquals(_overlayRoot, null)}");
+        // ── Top-right INFO panel ── sits just below the game's top HUD and grows
+        // downward. Holds the static world/combat info (Map Value, Combat, Tumble).
+        _infoText = CreateText("Info", font, _overlayRoot.transform,
+            anchor: new Vector2(1f, 1f), pivot: new Vector2(1f, 1f),
+            anchoredPos: new Vector2(-25f, -80f),
+            alignment: TextAlignmentOptions.TopRight);
+
+        // ── Bottom-right PLAYER panel ── bottom-aligned so the list grows UPWARD as
+        // players join, into the empty middle — never overlapping the info panel or
+        // the game's UI for realistic lobby sizes.
+        _playerText = CreateText("Players", font, _overlayRoot.transform,
+            anchor: new Vector2(1f, 0f), pivot: new Vector2(1f, 0f),
+            anchoredPos: new Vector2(-25f, 40f),
+            alignment: TextAlignmentOptions.BottomRight);
+
+        // HeadclefUI.Logger.LogInfo($"Overlay created. activeInHierarchy={_overlayRoot.activeInHierarchy}, parent='{_overlayRoot.transform.parent?.name}'");
+        // HeadclefUI.Logger.LogInfo($"isDestroyed check: rootNull={_overlayRoot == null}, refNull={ReferenceEquals(_overlayRoot, null)}");
+    }
+
+    /// <summary>Creates a right-aligned TMP panel under <paramref name="parent"/>.</summary>
+    private static TextMeshProUGUI CreateText(string name, TMP_FontAsset? font, Transform parent,
+        Vector2 anchor, Vector2 pivot, Vector2 anchoredPos, TextAlignmentOptions alignment)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+
+        var tmp = go.AddComponent<TextMeshProUGUI>();
+        tmp.font = font;
+        tmp.color = new Color(0.79f, 0.91f, 0.90f, 1f);
+        tmp.fontSize = 15f;
+        tmp.enableWordWrapping = true;
+        tmp.alignment = alignment;
+
+        var rect = go.GetComponent<RectTransform>();
+        rect.anchorMin = anchor;
+        rect.anchorMax = anchor;
+        rect.pivot = pivot;
+        rect.sizeDelta = new Vector2(420f, 600f);
+        rect.anchoredPosition = anchoredPos;
+
+        return tmp;
     }
 
     private static void UpdateContent()
     {
-        if (_overlayText == null) return;
+        if (_infoText == null || _playerText == null) return;
 
-        var sb = new System.Text.StringBuilder();
-        
-        // ── Empty lines to push one line below ──
-        sb.AppendLine();
-        sb.AppendLine();
+        EnsureDepsChecked();
 
-        // ── Level ──
-        int mapLevel = 0;
-        if (StatsManager.instance?.runStats != null &&
-            StatsManager.instance.runStats.ContainsKey("level"))
-        {
-            mapLevel = StatsManager.instance.runStats["level"] + 1;
-        }
-        
-        sb.AppendLine($"<color=#ff9600><size=22><b>Map Level {mapLevel}</b></size></color>");
+        // ── Top panel: static world / combat info (just below the game's top HUD) ──
+        var info = new System.Text.StringBuilder();
 
-        try
-        {
-            int impLevel = Improve.SaveData.CurrentLevel();
-            int impPoints = Improve.SaveData.AvailablePoints();
-            sb.AppendLine($"<color=#00ff99><size=22><b>Improve Level {impLevel}</b></size></color>");
-            sb.AppendLine($"<color=#cccccc>Available Points:</color> <color=#ffffff>{impPoints}</color>");
-        }
-        catch { /* Improve mod not loaded */ }
+        // Improve integration (soft dependency) — only touch Improve types if loaded
+        if (_improveLoaded)
+            AppendImproveInfo(info);
 
-        // ── Map Value ──
         MapValueTracker.UpdateIfNeeded();
         float mapValue = MapValueTracker.TotalValue;
-        sb.AppendLine($"<color=#aaaaaa>Map Value:</color> <color=#55ff55>${mapValue:N0}</color>");
+        info.AppendLine($"<color=#aaaaaa>Map Value:</color> <color=#55ff55>${mapValue:N0}</color>");
 
-        // ── Haul Progress ──
-        if (RoundDirector.instance != null)
-        {
-            int haulGoal = Traverse.Create(RoundDirector.instance)
-                .Field("extractionHaulGoal").GetValue<int>();
-            int currentHaul = RoundDirector.instance.currentHaul;
+        AppendCombatInfo(info);
 
-            if (haulGoal > 0)
-            {
-                float pct = (float)currentHaul / haulGoal * 100f;
-                string pctColor = pct >= 100f ? "#55ff55" : pct >= 50f ? "#ffff55" : "#ff5555";
-                sb.AppendLine($"<color=#aaaaaa>Haul:</color> <color={pctColor}>${currentHaul:N0} / ${haulGoal:N0}</color>");
-            }
-        }
+        _infoText.text = info.ToString().TrimEnd();
 
-        // ── Weapon / Combat Info ──
-        sb.AppendLine("<color=#ff9600><b>Combat</b></color>");
-        AppendCombatInfo(sb);
-
-        // ── Player List ──
-        sb.AppendLine("<color=#ff9600><b>Players</b></color>");
+        // ── Bottom panel: player list (bottom-aligned, grows UPWARD) ──
+        var roster = new System.Text.StringBuilder();
+        roster.AppendLine("<color=#ff9600><b>Players</b></color>");
 
         var players = SemiFunc.PlayerGetAll();
         if (players != null)
@@ -191,25 +210,31 @@ public static class TabOverlay
                 if (player == null) continue;
 
                 string name = player.playerName ?? "Unknown";
-                string status;
-                string statusColor;
+                string status = player.deadSet ? "Dead" : "Alive";
+                string statusColor = player.deadSet ? "#ff5555" : "#55ff55";
 
-                if (player.deadSet)
-                {
-                    status = "Dead";
-                    statusColor = "#ff5555";
-                }
-                else
-                {
-                    status = "Alive";
-                    statusColor = "#55ff55";
-                }
-
-                sb.AppendLine($"  <color=#cccccc>{name}</color> — <color={statusColor}>{status}</color>");
+                roster.AppendLine($"  <color=#cccccc>{name}</color> — <color={statusColor}>{status}</color>");
             }
         }
 
-        _overlayText.text = sb.ToString();
+        _playerText.text = roster.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Appends Improve level / available points. Isolated so the Improve assembly
+    /// is only resolved when the Improve mod is actually loaded.
+    /// </summary>
+    private static void AppendImproveInfo(System.Text.StringBuilder sb)
+    {
+        try
+        {
+            int impLevel = Improve.SaveData.CurrentLevel();
+            sb.AppendLine($"<color=#00ff99>Improve Level:</color> <color=#ffffff>{impLevel}</color>");
+        }
+        catch (Exception ex)
+        {
+            HeadclefUI.Logger.LogWarning($"Improve info unavailable: {ex.Message}");
+        }
     }
 
     private static void AppendCombatInfo(System.Text.StringBuilder sb)
@@ -249,11 +274,16 @@ public static class TabOverlay
     /// In REPO, "Equipped" means stored in inventory — when a gun is taken OUT
     /// and held in hand, it's in ItemState.Idle with PhysGrabObject.grabbedLocal == true.
     /// </summary>
+    private static ItemGun? _cachedFallbackGun;
+    private static float _lastGunScanTime;
+    private const float GunScanInterval = 0.25f;
+    // private static float _lastTumbleDiag;  // TEMP diagnostic throttle (disabled — fix confirmed)
+
     private static ItemGun? GetHeldGun()
     {
         try
         {
-            // Fast path: check what the local PhysGrabber is holding
+            // Fast path: check what the local PhysGrabber is holding (cheap — every frame)
             var grabber = PhysGrabber.instance;
             if (grabber != null && grabber.grabbed && grabber.grabbedPhysGrabObject != null)
             {
@@ -264,15 +294,23 @@ public static class TabOverlay
                 if (gun != null) return gun;
             }
 
-            // Fallback: scan all guns in scene and check grabbedLocal
+            // Expensive fallback: scan all guns in scene — throttled to limit per-frame cost
+            if (Time.time - _lastGunScanTime < GunScanInterval)
+                return _cachedFallbackGun;
+            _lastGunScanTime = Time.time;
+
             foreach (var gun in UnityEngine.Object.FindObjectsOfType<ItemGun>())
             {
                 var physObj = gun.GetComponent<PhysGrabObject>()
                            ?? gun.GetComponentInParent<PhysGrabObject>();
                 if (physObj != null && physObj.grabbedLocal)
+                {
+                    _cachedFallbackGun = gun;
                     return gun;
+                }
             }
 
+            _cachedFallbackGun = null;
             return null;
         }
         catch
@@ -337,36 +375,29 @@ public static class TabOverlay
             int baseDmg = hurtCollider.enemyDamage;
             if (baseDmg <= 0) baseDmg = 12; // fallback to known default
 
-            // Read upgrade level using Character_Stats API (same source as TumbleLaunchDamagePatch)
-            // This includes upgrades from all mods (Improve, etc.)
+            // Read the Launch upgrade level — prefers Character Stats (if loaded),
+            // otherwise vanilla StatsManager. The mod accesses are isolated below.
             string steamId = SemiFunc.PlayerGetSteamID(PlayerAvatar.instance);
-            int tumbleUpgrades = 0;
-            try
-            {
-                tumbleUpgrades = Character_Stats.Character_Stats.GetUpgradeLevel(steamId, "Launch");
-            }
-            catch
-            {
-                // Character Stats mod not loaded — fallback to vanilla
-                if (StatsManager.instance != null &&
-                    StatsManager.instance.playerUpgradeLaunch.TryGetValue(steamId, out int lvl))
-                {
-                    tumbleUpgrades = lvl;
-                }
-            }
+            int tumbleUpgrades = GetLaunchUpgradeLevel(steamId);
 
-            // Apply the same scaling formula the TumbleLaunchDamagePatch uses
-            if (tumbleUpgrades > 0 && Increase_Tumble_Damage.Increase_Tumble_Damage.EnableDamageOnEnemy.Value)
+            // TEMP DIAGNOSTIC (disabled — Improve/tumble fix confirmed). Re-enable to
+            // compare the level the UI uses (effLaunch) against the raw StatsManager value.
+            // if (Time.time - _lastTumbleDiag > 3f)
+            // {
+            //     _lastTumbleDiag = Time.time;
+            //     int vanillaLaunch = (StatsManager.instance != null &&
+            //         StatsManager.instance.playerUpgradeLaunch.TryGetValue(steamId, out int vl)) ? vl : -1;
+            //     HeadclefUI.Logger.LogInfo(
+            //         $"[TumbleDiag] steamId='{steamId}' charStats={_charStatsLoaded} itd={_tumbleDamageLoaded} " +
+            //         $"effLaunch={tumbleUpgrades} vanillaLaunch={vanillaLaunch} baseDmg={baseDmg}");
+            // }
+
+            // Apply Increase Tumble Damage scaling only if that mod is loaded.
+            if (tumbleUpgrades > 0 && _tumbleDamageLoaded)
             {
-                float multPerLvl = Increase_Tumble_Damage.Increase_Tumble_Damage.MultiplierPerLevel.Value;
-                float maxMult = Increase_Tumble_Damage.Increase_Tumble_Damage.MaxMultiplier.Value;
-
-                float multiplier = multPerLvl * tumbleUpgrades;
-                if (maxMult > 0f)
-                    multiplier = Math.Min(multiplier, maxMult);
-
-                if (multiplier > 0f)
-                    return Mathf.RoundToInt(baseDmg * multiplier);
+                int scaled = GetScaledTumbleDamage(baseDmg, tumbleUpgrades);
+                if (scaled > 0)
+                    return scaled;
             }
 
             return baseDmg;
@@ -375,5 +406,50 @@ public static class TabOverlay
         {
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Launch upgrade level — prefers the Character Stats mod (if loaded), else
+    /// vanilla StatsManager. The Character Stats access is isolated into its own
+    /// method so its assembly is only resolved when that mod is present.
+    /// </summary>
+    private static int GetLaunchUpgradeLevel(string steamId)
+    {
+        if (_charStatsLoaded)
+        {
+            try { return GetLaunchLevelFromCharacterStats(steamId); }
+            catch { /* fall through to vanilla */ }
+        }
+
+        if (StatsManager.instance != null &&
+            StatsManager.instance.playerUpgradeLaunch.TryGetValue(steamId, out int lvl))
+        {
+            return lvl;
+        }
+        return 0;
+    }
+
+    private static int GetLaunchLevelFromCharacterStats(string steamId)
+        => Character_Stats.Character_Stats.GetUpgradeLevel(steamId, "Launch");
+
+    /// <summary>
+    /// Applies the Increase Tumble Damage scaling formula. Isolated so its assembly
+    /// is only resolved when that mod is loaded.
+    /// </summary>
+    private static int GetScaledTumbleDamage(int baseDmg, int upgrades)
+    {
+        if (!Increase_Tumble_Damage.Increase_Tumble_Damage.EnableDamageOnEnemy.Value)
+            return 0;
+
+        float multPerLvl = Increase_Tumble_Damage.Increase_Tumble_Damage.MultiplierPerLevel.Value;
+        float maxMult = Increase_Tumble_Damage.Increase_Tumble_Damage.MaxMultiplier.Value;
+
+        float multiplier = multPerLvl * upgrades;
+        if (maxMult > 0f)
+            multiplier = Math.Min(multiplier, maxMult);
+
+        if (multiplier > 0f)
+            return Mathf.RoundToInt(baseDmg * multiplier);
+        return 0;
     }
 }
