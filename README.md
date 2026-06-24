@@ -1,29 +1,25 @@
 # UI
 
-A [BepInEx](https://github.com/BepInEx/BepInEx) mod for **R.E.P.O.** that adds a unified Tab overlay with level info, map value, haul progress, combat stats, and a player list.
+A [BepInEx](https://github.com/BepInEx/BepInEx) mod for **R.E.P.O.** that adds a clean two-panel Tab overlay showing your Improve level, map value, combat/tumble stats, and a live player list.
 
 ## What This Mod Does
 
-Hold **Tab** during gameplay to see a clean info panel on the right side of your screen:
+Hold **Tab** during gameplay to see two compact panels on the right side of your screen, positioned to stay clear of the game's own HUD:
+
+- **Top-right — Info** — sits just below the game's HUD: Improve level, map value, and combat/tumble stats.
+- **Bottom-right — Players** — a live player list that grows **upward** as more players join, so it never collides with the info panel.
 
 ![UI Overlay Example](https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/Panel%20-%20IncreasedTumbleLaunch%20Effect.png)
 
-### Level Info
+> **Map Level** and **Haul** are intentionally not shown — the game already displays these natively in the Tab menu and top-right HUD.
 
-- **Map Level** — the current level you're on (Level 1, Level 2, etc.).
-- **Improve Level** — your current Improve mod level and available points *(requires [Improve](https://github.com/headclef/Repo-Improve))*.
+### Improve Level
+
+- **Improve Level** — your current Improve mod level *(requires [Improve](https://github.com/headclef/Repo-Improve))*.
 
 ### Map Value
 
 Tracks the total remaining dollar value of all valuable items on the current map. Updates in real time as items are broken, destroyed, or extracted.
-
-### Haul Progress
-
-Shows your current haul versus the extraction goal with color-coded text:
-
-- 🟥 **Red** — below 50% of goal
-- 🟨 **Yellow** — 50–99% of goal
-- 🟩 **Green** — goal reached!
 
 ### Combat
 
@@ -33,7 +29,7 @@ Displays real-time combat information:
 
 ![Holding Gun Effect](https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/Panel%20-%20Holding%20Gun%20Effect.png)
 
-- **Tumble launch damage** — shows your tumble damage including scaling from [Increase Tumble Damage](https://github.com/headclef/Repo-Increase-Tumble-Damage) upgrades and [Improve](https://github.com/headclef/Repo-Improve) stat points *(requires [Character Stats](https://github.com/headclef/Repo-Character-Stats))*.
+- **Tumble launch damage** — shows your tumble damage including scaling from [Increase Tumble Damage](https://github.com/headclef/Repo-IncreaseTumbleDamage) upgrades and [Improve](https://github.com/headclef/Repo-Improve) stat points *(requires [Character Stats](https://github.com/headclef/Repo-CharacterStats))*.
 
 ### Player List
 
@@ -54,9 +50,9 @@ Just hold **Tab** (the map key) during any level. The overlay appears on the rig
 
 ### Optional (soft dependencies)
 
-- **[Improve](https://github.com/headclef/Repo-Improve)** — enables Improve Level and available points display.
-- **[Increase Tumble Damage](https://github.com/headclef/Repo-Increase-Tumble-Damage)** — enables tumble damage scaling display.
-- **[Character Stats](https://github.com/headclef/Repo-Character-Stats)** — provides accurate upgrade levels from all mods for combat info.
+- **[Improve](https://github.com/headclef/Repo-Improve)** — enables the Improve Level display.
+- **[Increase Tumble Damage](https://github.com/headclef/Repo-IncreaseTumbleDamage)** — enables tumble damage scaling display.
+- **[Character Stats](https://github.com/headclef/Repo-CharacterStats)** — provides accurate upgrade levels from all mods for combat info.
 
 The UI mod works without any of the above — those sections are simply hidden when the corresponding mod isn't installed.
 
@@ -70,9 +66,17 @@ The UI mod works without any of the above — those sections are simply hidden w
 
 - The overlay runs per-client — shows data available to your game client.
 - Player list shows all connected players and their alive/dead status.
-- Map value tracking and haul progress work the same in multiplayer.
+- Map value tracking works the same in multiplayer.
 
 ## Changelog
+
+### v1.2.0
+
+- **Two-panel layout** — an info panel (top-right, just below the game HUD) and a player list (bottom-right) that grows upward as players join, so the overlay never collides with the game's UI.
+- Removed the **Map Level** and **Haul** sections — the game now shows these natively in the Tab menu.
+- Simplified the Improve section to a single **Improve Level** line (removed Available Points).
+- Smaller fonts and tighter spacing for a more compact overlay.
+- Tumble launch damage now reflects live upgrade levels (via the Character Stats fix).
 
 ### v1.1.0
 
@@ -96,14 +100,16 @@ The UI mod works without any of the above — those sections are simply hidden w
 ```text
 ├── HeadclefUI.cs                   # Plugin entry point
 ├── MapValueTracker.cs              # Tracks remaining valuable item values
-├── TabOverlay.cs                   # Tab overlay panel — rendering & input
+├── TabOverlay.cs                   # Tab overlay panels — rendering & input
 └── README.md
 ```
 
 ### Building
 
+This project is part of the `Repo.slnx` solution and references Character Stats / Improve / Increase Tumble Damage at compile time. Build the **whole solution** so dependencies build in the correct order:
+
 ```bash
-dotnet build
+dotnet build ../Repo.slnx
 ```
 
 ## License
