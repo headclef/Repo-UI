@@ -9,7 +9,10 @@ Hold **Tab** during gameplay to see two compact panels on the right side of your
 - **Top-right — Info** — sits just below the game's HUD: Improve level, map value, and combat/tumble stats.
 - **Bottom-right — Players** — a live player list that grows **upward** as more players join, so it never collides with the info panel.
 
-![UI Overlay Example](https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/Panel%20-%20IncreasedTumbleLaunch%20Effect.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/ui-in-level.jpg" width="48%" alt="Overlay during a level" />
+  <img src="https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/ui-in-truck.jpg" width="48%" alt="Overlay back in the truck" />
+</p>
 
 > **Map Level** and **Haul** are intentionally not shown — the game already displays these natively in the Tab menu and top-right HUD.
 
@@ -26,9 +29,6 @@ Tracks the total remaining dollar value of all valuable items on the current map
 Displays real-time combat information:
 
 - **Held weapon** — name, ammo bars, and damage when holding a gun (supports bullet-based and laser guns).
-
-![Holding Gun Effect](https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/Panel%20-%20Holding%20Gun%20Effect.png)
-
 - **Tumble launch damage** — shows your tumble damage including scaling from [Increase Tumble Damage](https://github.com/headclef/Repo-IncreaseTumbleDamage) upgrades and [Improve](https://github.com/headclef/Repo-Improve) stat points *(requires [Character Stats](https://github.com/headclef/Repo-CharacterStats))*.
 
 ### Player List
@@ -37,6 +37,21 @@ Lists all connected players with their current status:
 
 - **Alive** (green)
 - **Dead** (red)
+
+### With Other Mods Installed
+
+The overlay only shows the sections it has data for. Install [Improve](https://github.com/headclef/Repo-Improve) and an **Improve Level** line appears; add [Increase Tumble Damage](https://github.com/headclef/Repo-IncreaseTumbleDamage) and the **Tumble Launch** value scales with your upgrades.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/ui-improve-in-level.jpg" width="48%" alt="With Improve — in a level" />
+  <img src="https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/ui-improve-in-truck.jpg" width="48%" alt="With Improve — in the truck" />
+</p>
+<p align="center">
+  <img src="https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/ui-improve-tumble-in-level.jpg" width="48%" alt="With Improve and Increase Tumble Damage — in a level" />
+  <img src="https://raw.githubusercontent.com/headclef/Repo-UI/core/screenshots/ui-improve-tumble-in-truck.jpg" width="48%" alt="With Improve and Increase Tumble Damage — in the truck" />
+</p>
+
+> Top row adds the **Improve Level** line; bottom row shows **Tumble Launch** scaled by Increase Tumble Damage (15 → 82 dmg with five upgrades).
 
 ## Usage
 
