@@ -13,7 +13,7 @@ public class HeadclefUI : BaseUnityPlugin
 {
     private const string PluginGuid = "headclef.UI";
     private const string PluginName = "UI";
-    private const string PluginVersion = "1.1.2";
+    private const string PluginVersion = "1.2.0";
 
     internal static HeadclefUI Instance { get; private set; } = null!;
     internal new static ManualLogSource Logger => Instance._logger;
