@@ -31,6 +31,7 @@ public static class TabOverlay
     private static bool _improveLoaded;
     private static bool _charStatsLoaded;
     private static bool _tumbleDamageLoaded;
+    private static bool _berserkLoaded;
 
     private static void EnsureDepsChecked()
     {
@@ -41,6 +42,7 @@ public static class TabOverlay
         _improveLoaded = plugins.ContainsKey("headclef.Improve");
         _charStatsLoaded = plugins.ContainsKey("headclef.CharacterStats");
         _tumbleDamageLoaded = plugins.ContainsKey("headclef.IncreaseTumbleDamage");
+        _berserkLoaded = plugins.ContainsKey("headclef.Berserk");
     }
 
     [HarmonyPatch(typeof(RoundDirector), "Update")]
@@ -186,6 +188,11 @@ public static class TabOverlay
         // ── Top panel: static world / combat info (just below the game's top HUD) ──
         var info = new System.Text.StringBuilder();
 
+        // Berserk state (soft dependency) — shown first and only while it's active, so
+        // the player can plainly see the boost the TAB stats below already reflect.
+        if (_berserkLoaded)
+            AppendBerserkInfo(info);
+
         // Improve integration (soft dependency) — only touch Improve types if loaded
         if (_improveLoaded)
             AppendImproveInfo(info);
@@ -218,6 +225,29 @@ public static class TabOverlay
         }
 
         _playerText.text = roster.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// Appends a prominent BERSERK banner while the berserk state is active, showing
+    /// the live Strength/Launch bonus. Isolated so the Berserk assembly is only
+    /// resolved when that mod is actually loaded.
+    /// </summary>
+    private static void AppendBerserkInfo(System.Text.StringBuilder sb)
+    {
+        try
+        {
+            if (!Berserk.Berserk.IsActive) return;
+
+            int str = Berserk.Berserk.ActiveStrengthBonus;
+            int launch = Berserk.Berserk.ActiveLaunchBonus;
+            sb.AppendLine(
+                $"<color=#ff3322><b>BERSERK ACTIVE</b></color> " +
+                $"<color=#ffb0a0>+{str} Strength, +{launch} Launch</color>");
+        }
+        catch (Exception ex)
+        {
+            HeadclefUI.Logger.LogWarning($"Berserk info unavailable: {ex.Message}");
+        }
     }
 
     /// <summary>

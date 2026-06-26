@@ -9,11 +9,12 @@ namespace HeadclefUI;
 [BepInDependency("headclef.Improve", BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("headclef.CharacterStats", BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("headclef.IncreaseTumbleDamage", BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency("headclef.Berserk", BepInDependency.DependencyFlags.SoftDependency)]
 public class HeadclefUI : BaseUnityPlugin
 {
     private const string PluginGuid = "headclef.UI";
     private const string PluginName = "UI";
-    private const string PluginVersion = "1.2.0";
+    private const string PluginVersion = "1.3.0";
 
     internal static HeadclefUI Instance { get; private set; } = null!;
     internal new static ManualLogSource Logger => Instance._logger;
