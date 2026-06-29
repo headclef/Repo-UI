@@ -85,6 +85,11 @@ The UI mod works without any of the above — those sections are simply hidden w
 
 ## Changelog
 
+### v1.3.0
+
+- Added a **Berserk banner** — shows the live Strength and Tumble Launch bonus while the Berserk state is active.
+- Wired up **Berserk** as a soft dependency, so the overlay still loads and works without it.
+
 ### v1.2.0
 
 - **Two-panel layout** — an info panel (top-right, just below the game HUD) and a player list (bottom-right) that grows upward as players join, so the overlay never collides with the game's UI.
